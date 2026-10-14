@@ -101,6 +101,12 @@
   .quote { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .more { width: 100%; padding: 12px; border: 0; border-radius: 12px; background: var(--field); color: var(--hint); font: inherit; margin-top: 4px; }
 
+  h2.sub { font-size: 17px; margin: 24px 0 10px; }
+  .q { white-space: pre-wrap; word-break: break-word; margin: 8px 0 4px; }
+  .ans { white-space: pre-wrap; word-break: break-word; margin-top: 10px; padding-left: 10px; border-left: 3px solid var(--accent); }
+  .card textarea { background: var(--bg); min-height: 70px; margin-top: 10px; }
+  details.card summary { font-weight: 600; cursor: pointer; }
+  details.card .meta { margin-top: 8px; }
   .stub { background: var(--field); border-radius: 14px; padding: 18px; color: var(--hint); }
   .stub b { color: var(--text); }
   [hidden] { display: none !important; }
@@ -156,7 +162,14 @@
   <section id="v-ask" hidden>
     <h1>Вопрос мастеру</h1>
     <p class="lead">Напишите вопрос, ответ придёт сообщением от бота.</p>
-    <div class="stub"><b>Скоро.</b> Здесь будет форма вопроса и история ответов.</div>
+    <div id="faq"></div>
+    <label class="f"><span class="t">Ваш вопрос</span>
+      <textarea id="qtext" maxlength="1000" placeholder="Например: можно ли напечатать деталь из гибкого пластика?"></textarea>
+    </label>
+    <p class="err" id="qerr"></p>
+    <button class="send" id="qsend">Отправить вопрос</button>
+    <h2 class="sub">Мои вопросы</h2>
+    <div id="list-questions-my"></div>
   </section>
 
   <!-- МАСТЕР -->
@@ -176,8 +189,10 @@
 
   <section id="v-questions" hidden>
     <h1>Вопросы</h1>
-    <p class="lead">Вопросы клиентов.</p>
-    <div class="stub" id="st-questions"></div>
+    <p class="lead">Вопросы клиентов. Ответ уйдёт клиенту сообщением от бота.</p>
+    <div id="list-questions"></div>
+    <button class="more" id="qhistBtn">Показать отвеченные</button>
+    <div id="list-qdone" style="margin-top:12px"></div>
   </section>
 
   <section id="v-profit" hidden>
@@ -277,12 +292,12 @@ function setList(box, orders, emptyText, makeCard) {
   if (!orders.length) { box.append(h('div', { class: 'empty' }, emptyText)); return; }
   orders.forEach(o => box.append(makeCard(o)));
 }
-async function loadInto(boxId, path, emptyText, makeCard) {
+async function loadInto(boxId, path, emptyText, makeCard, key = 'orders') {
   const box = $(boxId);
   if (!box.children.length) box.textContent = 'Загрузка…';
   try {
-    const { orders } = await api(path);
-    setList(box, orders, emptyText, makeCard);
+    const data = await api(path);
+    setList(box, data[key], emptyText, makeCard);
   } catch (e) { box.textContent = e.message; }
 }
 
@@ -314,11 +329,7 @@ function show(id) {
   document.querySelectorAll('section').forEach(s => s.hidden = s.id !== 'v-' + id);
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.id === id));
   window.scrollTo(0, 0);
-  ({ orders: loadMyOrders, requests: loadRequests, aorders: loadActive, questions: fillQuestions })[id]?.();
-}
-function fillQuestions() {
-  $('st-questions').innerHTML = '';
-  $('st-questions').append(h('b', {}, `Без ответа: ${(me && me.openQuestions) || 0}.`), ' Подробный список будет на следующем этапе.');
+  ({ orders: loadMyOrders, ask: loadMyQuestions, requests: loadRequests, aorders: loadActive, questions: loadAdminQuestions })[id]?.();
 }
 function setMode(m) {
   mode = m;
@@ -441,6 +452,87 @@ function historyCard(o) {
     o.price != null && h('div', { class: 'price' }, `${o.price} ${cur()}`),
   );
 }
+
+/* ---------- ВОПРОСЫ: клиент ---------- */
+// Частые вопросы показываются над формой. Добавляйте свои в формате ['Вопрос?', 'Ответ.']
+const FAQ = [
+  // ['Сколько стоит печать?', 'Зависит от размера и материала. Отправьте модель, и я назову цену.'],
+];
+if (FAQ.length) {
+  $('faq').append(h('h2', { class: 'sub', style: 'margin-top:0' }, 'Частые вопросы'),
+    FAQ.map(([q, a]) => h('details', { class: 'card' }, h('summary', {}, q), h('div', { class: 'meta' }, a))));
+}
+
+const loadMyQuestions = () => loadInto('list-questions-my', '/api/questions',
+  'Вы ещё не задавали вопросов.', myQuestionCard, 'questions');
+
+function myQuestionCard(q) {
+  return h('div', { class: 'card' },
+    h('div', { class: 'ch' }, h('b', {}, `Вопрос #${q.id}`),
+      h('span', { class: 'pill ' + (q.answer ? 'done' : 'new') }, q.answer ? 'Есть ответ' : 'Ждёт ответа')),
+    h('div', { class: 'q' }, q.text),
+    h('div', { class: 'meta' }, fmtDate(q.created_at)),
+    q.answer && h('div', { class: 'ans' }, q.answer),
+  );
+}
+
+$('qsend').onclick = async () => {
+  $('qerr').textContent = '';
+  const text = $('qtext').value.trim();
+  if (text.length < 2) { $('qerr').textContent = 'Напишите вопрос'; return; }
+  const btn = $('qsend');
+  btn.disabled = true; btn.textContent = 'Отправляю…';
+  try {
+    await api('/api/questions', { text });
+    $('qtext').value = '';
+    tg.HapticFeedback?.notificationOccurred('success');
+    await refreshMe();
+    await loadMyQuestions();
+  } catch (e) {
+    $('qerr').textContent = e.message;
+    tg.HapticFeedback?.notificationOccurred('error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Отправить вопрос';
+  }
+};
+
+/* ---------- ВОПРОСЫ: мастер ---------- */
+const loadAdminQuestions = () => loadInto('list-questions', '/api/admin/questions?group=open',
+  'Вопросов без ответа нет.', questionCard, 'questions');
+
+function questionCard(q) {
+  const area = h('textarea', { maxlength: '2000', placeholder: 'Ваш ответ' });
+  const send = () => {
+    const t = area.value.trim();
+    if (!t) return notify('Напишите ответ');
+    doAction(`/api/admin/questions/${q.id}/answer`, { text: t }, null, loadAdminQuestions);
+  };
+  return h('div', { class: 'card' },
+    h('div', { class: 'ch' }, h('b', {}, `Вопрос #${q.id}`), h('span', { class: 'meta' }, fmtDate(q.created_at))),
+    clientLine(q),
+    h('div', { class: 'q' }, q.text),
+    area,
+    h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: send }, 'Ответить')),
+  );
+}
+
+function answeredCard(q) {
+  return h('div', { class: 'card' },
+    h('div', { class: 'ch' }, h('b', {}, `Вопрос #${q.id}`), h('span', { class: 'meta' }, fmtDate(q.created_at))),
+    clientLine(q),
+    h('div', { class: 'q' }, q.text),
+    h('div', { class: 'ans' }, q.answer),
+  );
+}
+
+let qHistOpen = false;
+$('qhistBtn').onclick = async () => {
+  qHistOpen = !qHistOpen;
+  $('qhistBtn').textContent = qHistOpen ? 'Скрыть отвеченные' : 'Показать отвеченные';
+  $('list-qdone').textContent = '';
+  if (!qHistOpen) return;
+  await loadInto('list-qdone', '/api/admin/questions?group=answered', 'Отвеченных вопросов пока нет.', answeredCard, 'questions');
+};
 
 /* ---------- запуск ---------- */
 async function init() {
