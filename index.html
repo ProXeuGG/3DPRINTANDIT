@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D-печать</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #1c1c1e);
+    --hint: var(--tg-theme-hint-color, #7d7d85);
+    --field: var(--tg-theme-secondary-bg-color, #f1f1f4);
+    --accent: var(--tg-theme-button-color, #2f7cf6);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --err: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 14px 16px calc(84px + env(safe-area-inset-bottom));
+    background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 22px; margin: 4px 0 4px; }
+  .lead { color: var(--hint); margin: 0 0 18px; }
+  .center { text-align: center; padding-top: 25vh; color: var(--hint); }
+  .empty { color: var(--hint); text-align: center; padding: 28px 0; }
+
+  nav {
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+    background: var(--field); padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav button {
+    flex: 1; border: 0; background: none; color: var(--hint); font: inherit;
+    font-size: 12px; padding: 9px 2px 8px; position: relative;
+  }
+  nav button span { display: block; font-size: 20px; line-height: 1.2; }
+  nav button.on { color: var(--accent); font-weight: 600; }
+  .badge {
+    position: absolute; top: 4px; left: 55%; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 9px; background: var(--err); color: #fff; font-size: 11px; line-height: 18px;
+    font-style: normal;
+  }
+
+  .mode { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+  .mode button {
+    border: 0; background: var(--field); color: var(--hint); font: inherit; font-size: 13px;
+    padding: 5px 12px; border-radius: 14px;
+  }
+
+  /* форма */
+  label.f { display: block; margin-bottom: 16px; }
+  .t { display: block; font-size: 14px; color: var(--hint); margin-bottom: 6px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; padding: 12px 14px; border: 2px solid transparent;
+    border-radius: 12px; background: var(--field); color: var(--text); font: inherit;
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .drop {
+    display: block; padding: 22px 14px; text-align: center; cursor: pointer;
+    border: 2px dashed var(--hint); border-radius: 14px; margin-bottom: 16px;
+  }
+  .drop.has { border-style: solid; border-color: var(--accent); }
+  .drop b { display: block; word-break: break-all; }
+  .drop small { color: var(--hint); }
+  input[type=file] { display: none; }
+  .row { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }
+  .err { color: var(--err); min-height: 20px; margin: 0 0 8px; font-size: 14px; }
+  button.send {
+    width: 100%; padding: 14px; border: 0; border-radius: 12px; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+  }
+  button.send:disabled { opacity: .55; }
+
+  /* карточки заказов */
+  .card { background: var(--field); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .ch { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .pill {
+    font-size: 12px; font-weight: 600; color: #fff; padding: 3px 10px; border-radius: 10px;
+    white-space: nowrap; background: var(--hint);
+  }
+  .pill.new { background: #d98a00; }
+  .pill.quoted { background: #2f7cf6; }
+  .pill.confirmed, .pill.queued { background: #7b5cf0; }
+  .pill.printing { background: #1e88c9; }
+  .pill.done { background: #2a9d3f; }
+  .pill.delivered { background: #7d7d85; }
+  .pill.cancelled { background: var(--err); }
+  .meta { color: var(--hint); font-size: 14px; word-break: break-word; }
+  .meta.dark { color: var(--text); }
+  .price { font-weight: 600; margin: 8px 0 2px; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btn {
+    flex: 1; min-width: 120px; padding: 10px 12px; border: 0; border-radius: 10px; font: inherit;
+    font-size: 15px; font-weight: 600; background: var(--accent); color: var(--accent-text);
+  }
+  .btn.sec { background: var(--bg); color: var(--text); }
+  .btn.danger { background: var(--bg); color: var(--err); }
+  .card input[type=number], .card select { background: var(--bg); padding: 10px 12px; }
+  .quote { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .more { width: 100%; padding: 12px; border: 0; border-radius: 12px; background: var(--field); color: var(--hint); font: inherit; margin-top: 4px; }
+
+  .stub { background: var(--field); border-radius: 14px; padding: 18px; color: var(--hint); }
+  .stub b { color: var(--text); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="boot" class="center">Загрузка…</div>
+
+<div id="app" hidden>
+  <div class="mode" id="modeBar" hidden><button id="modeBtn"></button></div>
+
+  <!-- КЛИЕНТ -->
+  <section id="v-order" hidden>
+    <h1>Заявка на 3D-печать</h1>
+    <p class="lead">Загрузите модель. Цену и срок я назову после просмотра файла.</p>
+
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".stl,.3mf,.obj,.step,.stp">
+      <span id="dropText">Выбрать файл модели<br><small>STL, 3MF, OBJ, STEP, до 45 МБ</small></span>
+    </label>
+
+    <label class="f"><span class="t">Материал</span>
+      <select id="material">
+        <option>PLA</option><option>PETG</option><option>ABS</option>
+        <option>ASA</option><option>TPU</option><option>Не знаю — посоветуйте</option>
+      </select>
+    </label>
+
+    <div class="row">
+      <label class="f"><span class="t">Цвет</span><input type="text" id="color" placeholder="Например, чёрный"></label>
+      <label class="f"><span class="t">Штук</span><input type="number" id="qty" value="1" min="1" max="1000" inputmode="numeric"></label>
+    </div>
+
+    <label class="f"><span class="t">Другой контакт (необязательно)</span>
+      <input type="text" id="contact" placeholder="Телефон или e-mail">
+    </label>
+
+    <label class="f"><span class="t">Комментарий</span>
+      <textarea id="comment" placeholder="Размеры, нагрузка, срок, нужна ли шлифовка"></textarea>
+    </label>
+
+    <p class="err" id="err"></p>
+    <button class="send" id="send">Отправить заявку</button>
+  </section>
+
+  <section id="v-orders" hidden>
+    <h1>Мои заказы</h1>
+    <p class="lead">Статусы и история ваших заказов.</p>
+    <div id="list-orders"></div>
+  </section>
+
+  <section id="v-ask" hidden>
+    <h1>Вопрос мастеру</h1>
+    <p class="lead">Напишите вопрос, ответ придёт сообщением от бота.</p>
+    <div class="stub"><b>Скоро.</b> Здесь будет форма вопроса и история ответов.</div>
+  </section>
+
+  <!-- МАСТЕР -->
+  <section id="v-requests" hidden>
+    <h1>Запросы</h1>
+    <p class="lead">Новые заявки: назовите цену и срок.</p>
+    <div id="list-requests"></div>
+  </section>
+
+  <section id="v-aorders" hidden>
+    <h1>Заказы</h1>
+    <p class="lead">Подтверждённые заказы в работе.</p>
+    <div id="list-aorders"></div>
+    <button class="more" id="histBtn">Показать историю</button>
+    <div id="list-history" style="margin-top:12px"></div>
+  </section>
+
+  <section id="v-questions" hidden>
+    <h1>Вопросы</h1>
+    <p class="lead">Вопросы клиентов.</p>
+    <div class="stub" id="st-questions"></div>
+  </section>
+
+  <section id="v-profit" hidden>
+    <h1>Прибыль</h1>
+    <p class="lead">Выручка, расходы и прибыль по месяцам.</p>
+    <div class="stub"><b>Скоро.</b> Появится на этапе с расходами.</div>
+  </section>
+
+  <nav id="tabs"></nav>
+</div>
+
+<script>
+// ВСТАВЬТЕ адрес вашего Worker (без / в конце):
+const API_URL = 'https://print-bot.semenovsasha2102.workers.dev';
+
+const tg = window.Telegram.WebApp;
+tg.ready(); tg.expand();
+const $ = id => document.getElementById(id);
+
+const STATUS = {
+  new: 'Новая заявка', quoted: 'Цена названа', confirmed: 'Подтверждён',
+  queued: 'В очереди на печать', printing: 'Печатается', done: 'Готов',
+  delivered: 'Выдан', cancelled: 'Отменён',
+};
+// следующий шаг для мастера
+const NEXT = {
+  confirmed: ['queued', 'В очередь на печать'],
+  queued: ['printing', 'Начать печать'],
+  printing: ['done', 'Готово'],
+  done: ['delivered', 'Выдан клиенту'],
+};
+
+const MENUS = {
+  client: [
+    { id: 'order',  icon: '➕', label: 'Заказать' },
+    { id: 'orders', icon: '📦', label: 'Мои заказы' },
+    { id: 'ask',    icon: '💬', label: 'Вопрос' },
+  ],
+  admin: [
+    { id: 'requests',  icon: '🆕', label: 'Запросы' },
+    { id: 'aorders',   icon: '📦', label: 'Заказы' },
+    { id: 'questions', icon: '💬', label: 'Вопросы' },
+    { id: 'profit',    icon: '💰', label: 'Прибыль' },
+  ],
+};
+
+let me = null, mode = 'client', current = null;
+const cur = () => (me && me.currency) || '₽';
+
+/* ---------- утилиты ---------- */
+function h(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e[k] = v;
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid != null && kid !== false) e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+function notify(msg) { tg.showAlert ? tg.showAlert(msg) : alert(msg); }
+function ask(msg) {
+  return new Promise(res => tg.showConfirm ? tg.showConfirm(msg, res) : res(confirm(msg)));
+}
+function fmtDate(s) {
+  const [y, m, d] = String(s).slice(0, 10).split('-');
+  return `${d}.${m}.${y}`;
+}
+function pill(status) { return h('span', { class: 'pill ' + status }, STATUS[status] || status); }
+
+async function api(path, body) {
+  const r = await fetch(API_URL + path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'X-Init-Data': tg.initData, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Ошибка сервера');
+  return j;
+}
+
+// действие с подтверждением и обновлением списка
+async function doAction(path, body, confirmMsg, reload) {
+  if (confirmMsg && !(await ask(confirmMsg))) return;
+  try {
+    await api(path, body);
+    tg.HapticFeedback?.notificationOccurred('success');
+    await refreshMe();
+    await reload();
+  } catch (e) { notify(e.message); }
+}
+
+function setList(box, orders, emptyText, makeCard) {
+  box.textContent = '';
+  if (!orders.length) { box.append(h('div', { class: 'empty' }, emptyText)); return; }
+  orders.forEach(o => box.append(makeCard(o)));
+}
+async function loadInto(boxId, path, emptyText, makeCard) {
+  const box = $(boxId);
+  if (!box.children.length) box.textContent = 'Загрузка…';
+  try {
+    const { orders } = await api(path);
+    setList(box, orders, emptyText, makeCard);
+  } catch (e) { box.textContent = e.message; }
+}
+
+/* ---------- меню ---------- */
+function badge(id) {
+  if (!me) return 0;
+  if (mode === 'client' && id === 'orders') return me.pendingDecision || 0;
+  if (mode === 'admin' && me.counts) {
+    if (id === 'requests') return me.counts.new || 0;
+    if (id === 'questions') return me.openQuestions || 0;
+  }
+  return 0;
+}
+function renderTabs() {
+  const nav = $('tabs');
+  nav.textContent = '';
+  for (const t of MENUS[mode]) {
+    const b = h('button', { 'data-id': t.id, class: t.id === current ? 'on' : '', onclick: () => show(t.id) },
+      h('span', {}, t.icon), t.label);
+    const n = badge(t.id);
+    if (n) b.append(h('i', { class: 'badge' }, n));
+    nav.append(b);
+  }
+}
+async function refreshMe() { me = await api('/api/me'); renderTabs(); }
+
+function show(id) {
+  current = id;
+  document.querySelectorAll('section').forEach(s => s.hidden = s.id !== 'v-' + id);
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+  window.scrollTo(0, 0);
+  ({ orders: loadMyOrders, requests: loadRequests, aorders: loadActive, questions: fillQuestions })[id]?.();
+}
+function fillQuestions() {
+  $('st-questions').innerHTML = '';
+  $('st-questions').append(h('b', {}, `Без ответа: ${(me && me.openQuestions) || 0}.`), ' Подробный список будет на следующем этапе.');
+}
+function setMode(m) {
+  mode = m;
+  if (me.role === 'admin') {
+    $('modeBar').hidden = false;
+    $('modeBtn').textContent = m === 'admin' ? 'Режим мастера · как клиент' : 'Режим клиента · вернуться';
+  }
+  current = MENUS[m][0].id;
+  renderTabs();
+  show(current);
+}
+
+/* ---------- КЛИЕНТ: мои заказы ---------- */
+const loadMyOrders = () => loadInto('list-orders', '/api/orders',
+  'Заказов пока нет. Оформите первый на вкладке «Заказать».', myCard);
+
+function myCard(o) {
+  const c = h('div', { class: 'card' },
+    h('div', { class: 'ch' }, h('b', {}, `Заказ #${o.id}`), pill(o.status)),
+    h('div', { class: 'meta' }, `${o.material}, ${o.color || 'цвет не указан'}, ${o.qty} шт.`),
+    o.file_name && h('div', { class: 'meta' }, o.file_name),
+    h('div', { class: 'meta' }, fmtDate(o.created_at)),
+    o.price != null && h('div', { class: 'price' }, `${o.price} ${cur()} · срок ${o.days} дн.`),
+  );
+  if (o.status === 'quoted') {
+    c.append(h('div', { class: 'btns' },
+      h('button', { class: 'btn', onclick: () => doAction(`/api/orders/${o.id}/accept`, {}, `Принять цену ${o.price} ${cur()} и срок ${o.days} дн.?`, loadMyOrders) }, 'Принять'),
+      h('button', { class: 'btn danger', onclick: () => doAction(`/api/orders/${o.id}/cancel`, {}, 'Отказаться от заказа?', loadMyOrders) }, 'Отказаться'),
+    ));
+  } else if (o.status === 'new') {
+    c.append(h('div', { class: 'btns' },
+      h('button', { class: 'btn danger', onclick: () => doAction(`/api/orders/${o.id}/cancel`, {}, 'Отменить заявку?', loadMyOrders) }, 'Отменить заявку'),
+    ));
+  }
+  return c;
+}
+
+/* ---------- МАСТЕР ---------- */
+function clientLine(o) {
+  const name = [o.first_name, o.last_name].filter(Boolean).join(' ') || 'Без имени';
+  return h('div', { class: 'meta dark' },
+    `${name}${o.username ? ' · @' + o.username : ''} · ID ${o.user_id}`);
+}
+function details(o) {
+  return [
+    clientLine(o),
+    h('div', { class: 'meta' }, `${o.material}, ${o.color || 'цвет не указан'}, ${o.qty} шт.`),
+    o.contact && h('div', { class: 'meta' }, `Контакт: ${o.contact}`),
+    o.comment && h('div', { class: 'meta' }, `Комментарий: ${o.comment}`),
+    h('div', { class: 'meta' }, `${o.file_name || 'без файла'} · ${fmtDate(o.created_at)}`),
+  ];
+}
+function fileButton(o) {
+  if (!o.has_file) return null;
+  return h('button', { class: 'btn sec', onclick: () => doAction(`/api/admin/orders/${o.id}/send-file`, {}, null, async () => notify('Файл отправлен вам в чат с ботом')) }, 'Получить файл');
+}
+
+const loadRequests = () => loadInto('list-requests', '/api/admin/orders?group=requests', 'Новых запросов нет.', requestCard);
+
+function requestCard(o) {
+  const price = h('input', { type: 'number', inputmode: 'numeric', min: '0', placeholder: `Цена, ${cur()}`, value: o.price ?? '' });
+  const days = h('input', { type: 'number', inputmode: 'numeric', min: '1', placeholder: 'Срок, дней', value: o.days ?? '' });
+  const send = () => {
+    const p = parseInt(price.value, 10), d = parseInt(days.value, 10);
+    if (!(p >= 0) || !(d >= 1)) return notify('Укажите цену и срок в днях');
+    doAction(`/api/admin/orders/${o.id}/quote`, { price: p, days: d }, null, loadRequests);
+  };
+  return h('div', { class: 'card' },
+    h('div', { class: 'ch' }, h('b', {}, `Заявка #${o.id}`), pill(o.status)),
+    details(o),
+    o.status === 'quoted' && h('div', { class: 'meta dark' }, 'Ждём решения клиента'),
+    h('div', { class: 'quote' }, price, days),
+    h('div', { class: 'btns' },
+      h('button', { class: 'btn', onclick: send }, o.status === 'quoted' ? 'Изменить цену' : 'Назвать цену'),
+      fileButton(o),
+      h('button', { class: 'btn danger', onclick: () => doAction(`/api/admin/orders/${o.id}/status`, { status: 'cancelled' }, `Отклонить заявку #${o.id}?`, loadRequests) }, 'Отклонить'),
+    ),
+  );
+}
+
+const loadActive = () => loadInto('list-aorders', '/api/admin/orders?group=active', 'Активных заказов нет.', activeCard);
+
+function activeCard(o) {
+  const next = NEXT[o.status];
+  const sel = h('select', {
+    onchange: () => {
+      const s = sel.value; sel.value = '';
+      if (!s) return;
+      const msg = (s === 'cancelled' || s === 'delivered') ? `Заказ #${o.id}: ${STATUS[s].toLowerCase()}?` : null;
+      doAction(`/api/admin/orders/${o.id}/status`, { status: s }, msg, loadActive);
+    },
+  }, h('option', { value: '' }, 'Другой статус…'),
+    Object.keys(STATUS).filter(s => ['confirmed', 'queued', 'printing', 'done', 'delivered', 'cancelled'].includes(s) && s !== o.status)
+      .map(s => h('option', { value: s }, STATUS[s])));
+  return h('div', { class: 'card' },
+    h('div', { class: 'ch' }, h('b', {}, `Заказ #${o.id}`), pill(o.status)),
+    details(o),
+    h('div', { class: 'price' }, `${o.price} ${cur()} · срок ${o.days} дн.`),
+    h('div', { class: 'btns' },
+      next && h('button', { class: 'btn', onclick: () => doAction(`/api/admin/orders/${o.id}/status`, { status: next[0] }, next[0] === 'delivered' ? `Заказ #${o.id}: выдан клиенту?` : null, loadActive) }, next[1]),
+      fileButton(o),
+    ),
+    h('div', { class: 'btns' }, sel),
+  );
+}
+
+let histOpen = false;
+$('histBtn').onclick = async () => {
+  histOpen = !histOpen;
+  $('histBtn').textContent = histOpen ? 'Скрыть историю' : 'Показать историю';
+  const box = $('list-history');
+  box.textContent = '';
+  if (!histOpen) return;
+  await loadInto('list-history', '/api/admin/orders?group=history', 'История пуста.', historyCard);
+};
+function historyCard(o) {
+  return h('div', { class: 'card' },
+    h('div', { class: 'ch' }, h('b', {}, `Заказ #${o.id}`), pill(o.status)),
+    details(o),
+    o.price != null && h('div', { class: 'price' }, `${o.price} ${cur()}`),
+  );
+}
+
+/* ---------- запуск ---------- */
+async function init() {
+  if (!tg.initData) { $('boot').textContent = 'Откройте приложение через Telegram.'; return; }
+  try { me = await api('/api/me'); } catch (e) { $('boot').textContent = e.message; return; }
+  $('boot').hidden = true;
+  $('app').hidden = false;
+  $('modeBtn').onclick = () => setMode(mode === 'admin' ? 'client' : 'admin');
+  setMode(me.role);
+}
+init();
+
+/* ---------- форма заказа ---------- */
+const MAX = 45 * 1024 * 1024;
+let file = null;
+const dropDefault = 'Выбрать файл модели<br><small>STL, 3MF, OBJ, STEP, до 45 МБ</small>';
+
+$('file').addEventListener('change', e => {
+  file = e.target.files[0] || null;
+  $('drop').classList.toggle('has', !!file);
+  $('dropText').innerHTML = file
+    ? `<b>${file.name.replace(/[<>&]/g, '')}</b><small>${(file.size / 1048576).toFixed(1)} МБ. Нажмите, чтобы заменить</small>`
+    : dropDefault;
+});
+
+function fail(msg) { $('err').textContent = msg; tg.HapticFeedback?.notificationOccurred('error'); }
+
+$('send').addEventListener('click', async () => {
+  $('err').textContent = '';
+  if (!file) return fail('Прикрепите файл модели');
+  if (file.size > MAX) return fail('Файл больше 45 МБ. Сожмите модель или упростите её');
+
+  const fd = new FormData();
+  fd.append('document', file, file.name);
+  const order = {
+    material: $('material').value, color: $('color').value, qty: $('qty').value || '1',
+    contact: $('contact').value, comment: $('comment').value, fileName: file.name,
+  };
+
+  const btn = $('send');
+  btn.disabled = true; btn.textContent = 'Отправляю…';
+  try {
+    const r = await fetch(API_URL + '/api/order', {
+      method: 'POST',
+      headers: { 'X-Init-Data': tg.initData, 'X-Order': encodeURIComponent(JSON.stringify(order)) },
+      body: fd,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Не удалось отправить, попробуйте ещё раз');
+    tg.HapticFeedback?.notificationOccurred('success');
+    // очистить форму и показать заказ в списке
+    file = null; $('file').value = ''; $('drop').classList.remove('has'); $('dropText').innerHTML = dropDefault;
+    ['color', 'contact', 'comment'].forEach(i => $(i).value = ''); $('qty').value = 1;
+    await refreshMe();
+    show('orders');
+  } catch (e) {
+    fail(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Отправить заявку';
+  }
+});
+</script>
+</body>
+</html>
