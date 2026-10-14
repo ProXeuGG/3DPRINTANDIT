@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D-печать</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #1c1c1e);
+    --hint: var(--tg-theme-hint-color, #7d7d85);
+    --field: var(--tg-theme-secondary-bg-color, #f1f1f4);
+    --accent: var(--tg-theme-button-color, #2f7cf6);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --err: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 14px 16px calc(84px + env(safe-area-inset-bottom));
+    background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 22px; margin: 4px 0 4px; }
+  .lead { color: var(--hint); margin: 0 0 20px; }
+  .center { text-align: center; padding-top: 25vh; color: var(--hint); }
+
+  /* нижнее меню */
+  nav {
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+    background: var(--field); padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav button {
+    flex: 1; border: 0; background: none; color: var(--hint); font: inherit;
+    font-size: 12px; padding: 9px 2px 8px; position: relative;
+  }
+  nav button span { display: block; font-size: 20px; line-height: 1.2; }
+  nav button.on { color: var(--accent); font-weight: 600; }
+  .badge {
+    position: absolute; top: 4px; left: 55%; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 9px; background: var(--err); color: #fff; font-size: 11px; line-height: 18px;
+  }
+
+  /* режим мастера */
+  .mode { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+  .mode button {
+    border: 0; background: var(--field); color: var(--hint); font: inherit; font-size: 13px;
+    padding: 5px 12px; border-radius: 14px;
+  }
+
+  /* форма */
+  label.f { display: block; margin-bottom: 16px; }
+  .t { display: block; font-size: 14px; color: var(--hint); margin-bottom: 6px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; padding: 12px 14px; border: 2px solid transparent;
+    border-radius: 12px; background: var(--field); color: var(--text); font: inherit;
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .drop {
+    display: block; padding: 22px 14px; text-align: center; cursor: pointer;
+    border: 2px dashed var(--hint); border-radius: 14px; margin-bottom: 16px;
+  }
+  .drop.has { border-style: solid; border-color: var(--accent); }
+  .drop b { display: block; word-break: break-all; }
+  .drop small { color: var(--hint); }
+  input[type=file] { display: none; }
+  .row { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }
+  .err { color: var(--err); min-height: 20px; margin: 0 0 8px; font-size: 14px; }
+  button.send {
+    width: 100%; padding: 14px; border: 0; border-radius: 12px; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+  }
+  button.send:disabled { opacity: .55; }
+
+  /* заглушки */
+  .stub { background: var(--field); border-radius: 14px; padding: 18px; color: var(--hint); }
+  .stub b { color: var(--text); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="boot" class="center">Загрузка…</div>
+
+<div id="app" hidden>
+  <div class="mode" id="modeBar" hidden><button id="modeBtn"></button></div>
+
+  <!-- КЛИЕНТ -->
+  <section id="v-order" hidden>
+    <h1>Заявка на 3D-печать</h1>
+    <p class="lead">Загрузите модель, остальное уточним в переписке. Цену назову после просмотра файла.</p>
+
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".stl,.3mf,.obj,.step,.stp">
+      <span id="dropText">Выбрать файл модели<br><small>STL, 3MF, OBJ, STEP, до 45 МБ</small></span>
+    </label>
+
+    <label class="f"><span class="t">Материал</span>
+      <select id="material">
+        <option>PLA</option><option>PETG</option><option>ABS</option>
+        <option>ASA</option><option>TPU</option><option>Не знаю — посоветуйте</option>
+      </select>
+    </label>
+
+    <div class="row">
+      <label class="f"><span class="t">Цвет</span><input type="text" id="color" placeholder="Например, чёрный"></label>
+      <label class="f"><span class="t">Штук</span><input type="number" id="qty" value="1" min="1" max="1000" inputmode="numeric"></label>
+    </div>
+
+    <label class="f"><span class="t">Как с вами связаться, если не по Telegram</span>
+      <input type="text" id="contact" placeholder="Телефон или e-mail (необязательно)">
+    </label>
+
+    <label class="f"><span class="t">Комментарий</span>
+      <textarea id="comment" placeholder="Размеры, нагрузка, срок, нужна ли шлифовка"></textarea>
+    </label>
+
+    <p class="err" id="err"></p>
+    <button class="send" id="send">Отправить заявку</button>
+  </section>
+
+  <section id="v-orders" hidden>
+    <h1>Мои заказы</h1>
+    <p class="lead">Статусы и история ваших заказов.</p>
+    <div class="stub"><b>Скоро.</b> Здесь появится список заказов со статусами.</div>
+  </section>
+
+  <section id="v-ask" hidden>
+    <h1>Вопрос мастеру</h1>
+    <p class="lead">Напишите вопрос, ответ придёт сообщением от бота.</p>
+    <div class="stub"><b>Скоро.</b> Здесь будет форма вопроса и история ответов.</div>
+  </section>
+
+  <!-- МАСТЕР -->
+  <section id="v-requests" hidden>
+    <h1>Запросы</h1>
+    <p class="lead">Новые заявки, которым нужна цена.</p>
+    <div class="stub" id="st-requests"></div>
+  </section>
+
+  <section id="v-aorders" hidden>
+    <h1>Заказы</h1>
+    <p class="lead">Подтверждённые заказы в работе.</p>
+    <div class="stub" id="st-aorders"></div>
+  </section>
+
+  <section id="v-questions" hidden>
+    <h1>Вопросы</h1>
+    <p class="lead">Вопросы клиентов.</p>
+    <div class="stub" id="st-questions"></div>
+  </section>
+
+  <section id="v-profit" hidden>
+    <h1>Прибыль</h1>
+    <p class="lead">Выручка, расходы и прибыль по месяцам.</p>
+    <div class="stub"><b>Скоро.</b> Появится после этапа с заказами.</div>
+  </section>
+
+  <nav id="tabs"></nav>
+</div>
+
+<script>
+// ВСТАВЬТЕ адрес вашего Worker (без / в конце):
+const API_URL = 'https://print-bot.semenovsasha2102.workers.dev';
+
+const tg = window.Telegram.WebApp;
+tg.ready(); tg.expand();
+const $ = id => document.getElementById(id);
+
+const MENUS = {
+  client: [
+    { id: 'order',  icon: '➕', label: 'Заказать' },
+    { id: 'orders', icon: '📦', label: 'Мои заказы' },
+    { id: 'ask',    icon: '💬', label: 'Вопрос' },
+  ],
+  admin: [
+    { id: 'requests', icon: '🆕', label: 'Запросы' },
+    { id: 'aorders',    icon: '📦', label: 'Заказы' },
+    { id: 'questions',  icon: '💬', label: 'Вопросы' },
+    { id: 'profit',     icon: '💰', label: 'Прибыль' },
+  ],
+};
+
+let me = null;        // ответ /api/me
+let mode = 'client';  // какое меню показываем сейчас
+let current = null;
+
+async function api(path) {
+  const r = await fetch(API_URL + path, { headers: { 'X-Init-Data': tg.initData } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Ошибка сервера');
+  return j;
+}
+
+function badge(tabId) {
+  if (mode !== 'admin' || !me.counts) return 0;
+  if (tabId === 'requests')  return me.counts.new || 0;
+  if (tabId === 'questions') return me.openQuestions || 0;
+  return 0;
+}
+
+function renderTabs() {
+  const nav = $('tabs');
+  nav.textContent = '';
+  for (const t of MENUS[mode]) {
+    const b = document.createElement('button');
+    b.dataset.id = t.id;
+    const ic = document.createElement('span'); ic.textContent = t.icon;
+    b.append(ic, t.label);
+    const n = badge(t.id);
+    if (n) { const s = document.createElement('i'); s.className = 'badge'; s.textContent = n; b.append(s); }
+    b.onclick = () => show(t.id);
+    nav.append(b);
+  }
+}
+
+function show(id) {
+  current = id;
+  document.querySelectorAll('section').forEach(s => s.hidden = s.id !== 'v-' + id);
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+  window.scrollTo(0, 0);
+  fillStubs();
+}
+
+function fillStubs() {
+  if (!me || !me.counts) return;
+  const c = me.counts;
+  const set = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  set('st-requests',  `<b>Новых запросов: ${c.new || 0}.</b> Подробный список будет на следующем этапе.`);
+  set('st-aorders',   `<b>В работе: ${(c.confirmed || 0) + (c.printing || 0)}.</b> Подробный список будет на следующем этапе.`);
+  set('st-questions', `<b>Без ответа: ${me.openQuestions || 0}.</b> Подробный список будет на следующем этапе.`);
+}
+
+function setMode(m) {
+  mode = m;
+  if (me.role === 'admin') {
+    $('modeBar').hidden = false;
+    $('modeBtn').textContent = m === 'admin' ? 'Режим мастера · как клиент' : 'Режим клиента · вернуться';
+  }
+  renderTabs();
+  show(MENUS[m][0].id);
+}
+
+async function init() {
+  if (!tg.initData) { $('boot').textContent = 'Откройте приложение через Telegram.'; return; }
+  try {
+    me = await api('/api/me');
+  } catch (e) {
+    $('boot').textContent = e.message; return;
+  }
+  $('boot').hidden = true;
+  $('app').hidden = false;
+  $('modeBtn').onclick = () => setMode(mode === 'admin' ? 'client' : 'admin');
+  setMode(me.role);
+}
+init();
+
+// ---------- Форма заказа (как раньше) ----------
+const MAX = 45 * 1024 * 1024;
+let file = null;
+
+$('file').addEventListener('change', e => {
+  file = e.target.files[0] || null;
+  $('drop').classList.toggle('has', !!file);
+  $('dropText').innerHTML = file
+    ? `<b>${file.name.replace(/[<>&]/g, '')}</b><small>${(file.size/1048576).toFixed(1)} МБ. Нажмите, чтобы заменить</small>`
+    : 'Выбрать файл модели<br><small>STL, 3MF, OBJ, STEP, до 45 МБ</small>';
+});
+
+function fail(msg) { $('err').textContent = msg; tg.HapticFeedback?.notificationOccurred('error'); }
+
+$('send').addEventListener('click', async () => {
+  $('err').textContent = '';
+  if (!file) return fail('Прикрепите файл модели');
+  if (file.size > MAX) return fail('Файл больше 45 МБ. Пришлите его мне в чат напрямую');
+
+  const fd = new FormData();
+  fd.append('document', file, file.name);
+  const order = {
+    material: $('material').value,
+    color: $('color').value,
+    qty: $('qty').value || '1',
+    contact: $('contact').value,
+    comment: $('comment').value,
+  };
+
+  const btn = $('send');
+  btn.disabled = true; btn.textContent = 'Отправляю…';
+  try {
+    const r = await fetch(API_URL + '/api/order', {
+      method: 'POST',
+      headers: {
+        'X-Init-Data': tg.initData,
+        'X-Order': encodeURIComponent(JSON.stringify(order)),
+      },
+      body: fd,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Не удалось отправить, попробуйте ещё раз');
+    tg.HapticFeedback?.notificationOccurred('success');
+    btn.textContent = 'Заявка отправлена ✅';
+    setTimeout(() => tg.close(), 2000);
+  } catch (e) {
+    fail(e.message);
+    btn.disabled = false; btn.textContent = 'Отправить заявку';
+  }
+});
+</script>
+</body>
+</html>
