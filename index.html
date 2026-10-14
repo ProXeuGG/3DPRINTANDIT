@@ -101,6 +101,29 @@
   .quote { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .more { width: 100%; padding: 12px; border: 0; border-radius: 12px; background: var(--field); color: var(--hint); font: inherit; margin-top: 4px; }
 
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border: 2px solid transparent;
+    border-radius: 12px; background: var(--field); color: var(--text); font: inherit; font-size: 15px; }
+  .chip.on { border-color: var(--accent); font-weight: 600; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(128,128,128,.5); flex: none; display: inline-block; }
+  .tog { border: 0; border-radius: 10px; padding: 7px 12px; font: inherit; font-size: 14px; font-weight: 600; background: #2a9d3f; color: #fff; white-space: nowrap; }
+  .tog.off { background: var(--hint); }
+  .srow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(128,128,128,.2); }
+  .srow .nm { flex: 1; min-width: 0; word-break: break-word; }
+  .srow input[type=number] { width: 76px; padding: 8px 8px; }
+  .x { border: 0; background: none; color: var(--err); font-size: 22px; padding: 0 4px; }
+  .add { display: grid; grid-template-columns: 1fr 52px; gap: 8px; margin-top: 8px; }
+  .add input[type=color] { width: 52px; height: 100%; min-height: 44px; padding: 2px; border-radius: 10px; border: 0; background: var(--bg); }
+  .stat { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .stat > div { background: var(--field); border-radius: 14px; padding: 12px; }
+  .stat b { display: block; font-size: 18px; }
+  .stat span { color: var(--hint); font-size: 13px; }
+  .good { color: #2a9d3f; } .bad { color: var(--err); }
+  .line { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+  .money { margin-top: 10px; border-top: 1px solid rgba(128,128,128,.2); padding-top: 8px; }
+  .money summary { cursor: pointer; font-size: 14px; }
+  .money .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .money label span { font-size: 12px; color: var(--hint); display: block; margin-bottom: 3px; }
   h2.sub { font-size: 17px; margin: 24px 0 10px; }
   .q { white-space: pre-wrap; word-break: break-word; margin: 8px 0 4px; }
   .ans { white-space: pre-wrap; word-break: break-word; margin-top: 10px; padding-left: 10px; border-left: 3px solid var(--accent); }
@@ -129,17 +152,10 @@
       <span id="dropText">Выбрать файл модели<br><small>STL, 3MF, OBJ, STEP, до 45 МБ</small></span>
     </label>
 
-    <label class="f"><span class="t">Материал</span>
-      <select id="material">
-        <option>PLA</option><option>PETG</option><option>ABS</option>
-        <option>ASA</option><option>TPU</option><option>Не знаю — посоветуйте</option>
-      </select>
-    </label>
-
-    <div class="row">
-      <label class="f"><span class="t">Цвет</span><input type="text" id="color" placeholder="Например, чёрный"></label>
-      <label class="f"><span class="t">Штук</span><input type="number" id="qty" value="1" min="1" max="1000" inputmode="numeric"></label>
-    </div>
+    <div class="f"><span class="t">Материал</span><div class="chips" id="matChips"></div></div>
+    <div class="f" id="colorBox" hidden><span class="t">Цвет (только то, что есть в наличии)</span><div class="chips" id="colorChips"></div></div>
+    <p class="err" id="catErr"></p>
+    <label class="f"><span class="t">Штук</span><input type="number" id="qty" value="1" min="1" max="1000" inputmode="numeric"></label>
 
     <label class="f"><span class="t">Другой контакт (необязательно)</span>
       <input type="text" id="contact" placeholder="Телефон или e-mail">
@@ -195,10 +211,16 @@
     <div id="list-qdone" style="margin-top:12px"></div>
   </section>
 
+  <section id="v-stock" hidden>
+    <h1>Склад</h1>
+    <p class="lead">Что есть в наличии. Клиенты выбирают только из включённого.</p>
+    <div id="list-stock"></div>
+  </section>
+
   <section id="v-profit" hidden>
     <h1>Прибыль</h1>
-    <p class="lead">Выручка, расходы и прибыль по месяцам.</p>
-    <div class="stub"><b>Скоро.</b> Появится на этапе с расходами.</div>
+    <p class="lead">Считаются готовые и выданные заказы с ценой. Расходы вносятся в карточке заказа.</p>
+    <div id="profit-box"></div>
   </section>
 
   <nav id="tabs"></nav>
@@ -235,6 +257,7 @@ const MENUS = {
     { id: 'requests',  icon: '🆕', label: 'Запросы' },
     { id: 'aorders',   icon: '📦', label: 'Заказы' },
     { id: 'questions', icon: '💬', label: 'Вопросы' },
+    { id: 'stock',     icon: '🧵', label: 'Склад' },
     { id: 'profit',    icon: '💰', label: 'Прибыль' },
   ],
 };
@@ -329,7 +352,7 @@ function show(id) {
   document.querySelectorAll('section').forEach(s => s.hidden = s.id !== 'v-' + id);
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.id === id));
   window.scrollTo(0, 0);
-  ({ orders: loadMyOrders, ask: loadMyQuestions, requests: loadRequests, aorders: loadActive, questions: loadAdminQuestions })[id]?.();
+  ({ order: loadCatalog, orders: loadMyOrders, ask: loadMyQuestions, requests: loadRequests, aorders: loadActive, questions: loadAdminQuestions, stock: loadStock, profit: loadProfit })[id]?.();
 }
 function setMode(m) {
   mode = m;
@@ -353,6 +376,7 @@ function myCard(o) {
     o.file_name && h('div', { class: 'meta' }, o.file_name),
     h('div', { class: 'meta' }, fmtDate(o.created_at)),
     o.price != null && h('div', { class: 'price' }, `${o.price} ${cur()} · срок ${o.days} дн.`),
+    o.paid ? h('div', { class: 'meta' }, 'Оплачено ✓') : null,
   );
   if (o.status === 'quoted') {
     c.append(h('div', { class: 'btns' },
@@ -428,6 +452,7 @@ function activeCard(o) {
     h('div', { class: 'ch' }, h('b', {}, `Заказ #${o.id}`), pill(o.status)),
     details(o),
     h('div', { class: 'price' }, `${o.price} ${cur()} · срок ${o.days} дн.`),
+    moneyBox(o, loadActive),
     h('div', { class: 'btns' },
       next && h('button', { class: 'btn', onclick: () => doAction(`/api/admin/orders/${o.id}/status`, { status: next[0] }, next[0] === 'delivered' ? `Заказ #${o.id}: выдан клиенту?` : null, loadActive) }, next[1]),
       fileButton(o),
@@ -450,8 +475,10 @@ function historyCard(o) {
     h('div', { class: 'ch' }, h('b', {}, `Заказ #${o.id}`), pill(o.status)),
     details(o),
     o.price != null && h('div', { class: 'price' }, `${o.price} ${cur()}`),
+    o.status === 'delivered' && moneyBox(o, reloadHistory),
   );
 }
+const reloadHistory = () => loadInto('list-history', '/api/admin/orders?group=history', 'История пуста.', historyCard);
 
 /* ---------- ВОПРОСЫ: клиент ---------- */
 // Частые вопросы показываются над формой. Добавляйте свои в формате ['Вопрос?', 'Ответ.']
@@ -534,6 +561,123 @@ $('qhistBtn').onclick = async () => {
   await loadInto('list-qdone', '/api/admin/questions?group=answered', 'Отвеченных вопросов пока нет.', answeredCard, 'questions');
 };
 
+/* ---------- РАСХОДЫ И ОПЛАТА (в карточке заказа) ---------- */
+function moneyBox(o, reload) {
+  const cost = (o.cost_material || 0) + (o.cost_other || 0);
+  const profit = (o.price || 0) - cost;
+  const inp = v => h('input', { type: 'number', inputmode: 'decimal', min: '0', step: 'any', value: v ?? '' });
+  const grams = inp(o.grams), hours = inp(o.hours);
+  const cm = inp(o.cost_material || ''), co = inp(o.cost_other || '');
+  const hourCost = (me && me.hourCost) || 0;
+  const recalc = () => {
+    if (grams.value !== '') cm.value = Math.round(parseFloat(grams.value) * (o.price_kg || 0) / 1000) || 0;
+    if (hours.value !== '') co.value = Math.round(parseFloat(hours.value) * hourCost) || 0;
+  };
+  grams.oninput = recalc; hours.oninput = recalc;
+  const lab = (t, el) => h('label', {}, h('span', {}, t), el);
+  const save = () => doAction(`/api/admin/orders/${o.id}/costs`,
+    { grams: grams.value, hours: hours.value, cost_material: cm.value || 0, cost_other: co.value || 0 }, null, reload);
+  const togglePaid = () => doAction(`/api/admin/orders/${o.id}/paid`, { paid: !o.paid }, null, reload);
+  return h('details', { class: 'money' },
+    h('summary', {}, `Расходы ${cost} ${cur()} · прибыль ${profit} ${cur()} · ${o.paid ? 'оплачен ✓' : 'не оплачен'}`),
+    h('div', { class: 'g2' },
+      lab('Пластик, г', grams), lab('Время печати, ч', hours),
+      lab(`Стоимость пластика, ${cur()}`, cm), lab(`Прочие расходы, ${cur()}`, co)),
+    h('div', { class: 'meta', style: 'margin-top:6px' },
+      `Цена пластика ${o.price_kg || 0} ${cur()}/кг, час печати ${hourCost} ${cur()}. Суммы подставляются сами, их можно поправить.`),
+    h('div', { class: 'btns' },
+      h('button', { class: 'btn', onclick: save }, 'Сохранить расходы'),
+      h('button', { class: 'btn ' + (o.paid ? '' : 'sec'), onclick: togglePaid }, o.paid ? 'Оплачено ✓' : 'Отметить оплаченным')),
+  );
+}
+
+/* ---------- СКЛАД ---------- */
+async function loadStock() {
+  const box = $('list-stock');
+  if (!box.children.length) box.textContent = 'Загрузка…';
+  try { renderStock(box, (await api('/api/admin/stock')).materials); }
+  catch (e) { box.textContent = e.message; }
+}
+const stockOp = (body, confirmMsg) => doAction('/api/admin/stock', body, confirmMsg, loadStock);
+
+function renderStock(box, materials) {
+  box.textContent = '';
+  materials.forEach(m => {
+    const name = h('input', { type: 'text', placeholder: 'Название нового цвета', maxlength: '30' });
+    const hex = h('input', { type: 'color', value: '#cccccc' });
+    const price = h('input', { type: 'number', inputmode: 'numeric', min: '0', placeholder: `Цена за кг, ${cur()} (необязательно)` });
+    const add = () => {
+      const c = name.value.trim();
+      if (!c) return notify('Введите название цвета');
+      stockOp({ op: 'add', material: m.name, color: c, hex: hex.value, price_kg: price.value || 0 });
+    };
+    box.append(h('div', { class: 'card' },
+      h('div', { class: 'ch' }, h('b', {}, m.name),
+        h('button', { class: 'tog' + (m.in_stock ? '' : ' off'), onclick: () => stockOp({ op: 'material', name: m.name, in_stock: !m.in_stock }) },
+          m.in_stock ? 'В наличии' : 'Нет в наличии')),
+      !m.in_stock ? h('div', { class: 'meta' }, 'Материал скрыт от клиентов целиком.') : null,
+      m.colors.map(c => h('div', { class: 'srow' },
+        h('span', { class: 'dot', style: `background:${c.hex}` }),
+        h('span', { class: 'nm' }, c.color),
+        h('input', { type: 'number', inputmode: 'numeric', min: '0', value: c.price_kg || '', placeholder: cur() + '/кг',
+          onchange: e => stockOp({ op: 'price', id: c.id, price_kg: e.target.value || 0 }) }),
+        h('button', { class: 'tog' + (c.in_stock ? '' : ' off'), onclick: () => stockOp({ op: 'toggle', id: c.id, in_stock: !c.in_stock }) },
+          c.in_stock ? 'Есть' : 'Нет'),
+        h('button', { class: 'x', onclick: () => stockOp({ op: 'delete', id: c.id }, `Удалить цвет «${c.color}» совсем?`) }, '×'))),
+      h('div', { class: 'meta', style: 'margin-top:12px' }, 'Добавить цвет'),
+      h('div', { class: 'add' }, name, hex),
+      h('div', { style: 'margin-top:8px' }, price),
+      h('div', { class: 'btns' }, h('button', { class: 'btn sec', onclick: add }, 'Добавить')),
+    ));
+  });
+}
+
+/* ---------- ПРИБЫЛЬ ---------- */
+const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const money = n => `${Math.round(n).toLocaleString('ru-RU')} ${cur()}`;
+const sign = n => (n > 0 ? 'good' : n < 0 ? 'bad' : '');
+
+async function loadProfit() {
+  const box = $('profit-box');
+  if (!box.children.length) box.textContent = 'Загрузка…';
+  try {
+    const d = await api('/api/admin/profit');
+    box.textContent = '';
+    const now = new Date().toISOString().slice(0, 7);
+    const cm = d.months.find(m => m.month === now) || { revenue: 0, costs: 0 };
+    const tot = d.months.reduce((a, m) => ({ revenue: a.revenue + m.revenue, costs: a.costs + m.costs }), { revenue: 0, costs: 0 });
+    const stat = (label, val, cls) => h('div', {}, h('b', { class: cls || '' }, val), h('span', {}, label));
+    box.append(h('div', { class: 'stat' },
+      stat('Прибыль за этот месяц', money(cm.revenue - cm.costs), sign(cm.revenue - cm.costs)),
+      stat('Прибыль за всё время', money(tot.revenue - tot.costs), sign(tot.revenue - tot.costs)),
+      stat(`В работе (${d.pipeline.n} шт.)`, money(d.pipeline.sum)),
+      stat('Ждёт оплаты', money(d.unpaid)),
+    ));
+
+    const hc = h('input', { type: 'number', inputmode: 'decimal', min: '0', step: 'any', value: (me && me.hourCost) || '', placeholder: `${cur()} за час` });
+    box.append(h('div', { class: 'card' },
+      h('b', {}, 'Стоимость часа печати'),
+      h('div', { class: 'meta' }, 'Электричество и износ принтера за час. Подставляется в расходы заказа.'),
+      h('div', { style: 'margin-top:8px' }, hc),
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => doAction('/api/admin/settings', { hour_cost: hc.value || 0 }, null, loadProfit) }, 'Сохранить')),
+    ));
+
+    if (!d.months.length) { box.append(h('div', { class: 'empty' }, 'Пока нет завершённых заказов с ценой.')); return; }
+    const row = (label, val, cls) => h('div', { class: 'line' }, h('span', { class: 'meta' }, label), h('b', { class: cls || '' }, val));
+    d.months.forEach(m => {
+      const [y, mo] = m.month.split('-');
+      const profit = m.revenue - m.costs;
+      box.append(h('div', { class: 'card' },
+        h('div', { class: 'ch' }, h('b', {}, `${MONTHS[+mo - 1]} ${y}`), h('span', { class: 'meta' }, `заказов: ${m.n}`)),
+        row('Выручка', money(m.revenue)),
+        row('Расходы', money(m.costs)),
+        row('Прибыль', money(profit), sign(profit)),
+        row('Из них оплачено', money(m.paid_sum)),
+      ));
+    });
+  } catch (e) { box.textContent = e.message; }
+}
+
 /* ---------- запуск ---------- */
 async function init() {
   if (!tg.initData) { $('boot').textContent = 'Откройте приложение через Telegram.'; return; }
@@ -547,7 +691,7 @@ init();
 
 /* ---------- форма заказа ---------- */
 const MAX = 45 * 1024 * 1024;
-let file = null;
+let file = null, catalog = [], selMat = null, selColor = null;
 const dropDefault = 'Выбрать файл модели<br><small>STL, 3MF, OBJ, STEP, до 45 МБ</small>';
 
 $('file').addEventListener('change', e => {
@@ -560,15 +704,52 @@ $('file').addEventListener('change', e => {
 
 function fail(msg) { $('err').textContent = msg; tg.HapticFeedback?.notificationOccurred('error'); }
 
+async function loadCatalog() {
+  try { catalog = (await api('/api/catalog')).materials; $('catErr').textContent = ''; }
+  catch (e) { catalog = []; $('catErr').textContent = e.message; }
+  renderCatalog();
+}
+
+function renderCatalog() {
+  if (!catalog.find(m => m.name === selMat)) { selMat = null; selColor = null; }
+  const mc = $('matChips');
+  mc.textContent = '';
+  if (!catalog.length) {
+    mc.append(h('div', { class: 'meta' }, 'Сейчас нет материалов в наличии. Загляните позже или задайте вопрос.'));
+    $('colorBox').hidden = true;
+    $('send').disabled = true;
+    return;
+  }
+  $('send').disabled = false;
+  catalog.forEach(m => mc.append(h('button', {
+    class: 'chip' + (m.name === selMat ? ' on' : ''),
+    onclick: () => { selMat = m.name; selColor = null; renderCatalog(); },
+  }, m.name)));
+
+  const m = catalog.find(x => x.name === selMat);
+  $('colorBox').hidden = !m;
+  const cc = $('colorChips');
+  cc.textContent = '';
+  if (!m) return;
+  if (selColor && selColor !== 'Любой' && !m.colors.some(c => c.color === selColor)) selColor = null;
+  [...m.colors, { color: 'Любой', hex: null }].forEach(c => cc.append(h('button', {
+    class: 'chip' + (c.color === selColor ? ' on' : ''),
+    onclick: () => { selColor = c.color; renderCatalog(); },
+  }, c.hex ? h('span', { class: 'dot', style: `background:${c.hex}` }) : null,
+     c.color === 'Любой' ? 'Любой, на ваш выбор' : c.color)));
+}
+
 $('send').addEventListener('click', async () => {
   $('err').textContent = '';
   if (!file) return fail('Прикрепите файл модели');
+  if (!selMat) return fail('Выберите материал');
+  if (!selColor) return fail('Выберите цвет');
   if (file.size > MAX) return fail('Файл больше 45 МБ. Сожмите модель или упростите её');
 
   const fd = new FormData();
   fd.append('document', file, file.name);
   const order = {
-    material: $('material').value, color: $('color').value, qty: $('qty').value || '1',
+    material: selMat, color: selColor, qty: $('qty').value || '1',
     contact: $('contact').value, comment: $('comment').value, fileName: file.name,
   };
 
@@ -583,15 +764,17 @@ $('send').addEventListener('click', async () => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'Не удалось отправить, попробуйте ещё раз');
     tg.HapticFeedback?.notificationOccurred('success');
-    // очистить форму и показать заказ в списке
-    file = null; $('file').value = ''; $('drop').classList.remove('has'); $('dropText').innerHTML = dropDefault;
-    ['color', 'contact', 'comment'].forEach(i => $(i).value = ''); $('qty').value = 1;
+    file = null; selMat = null; selColor = null;
+    $('file').value = ''; $('drop').classList.remove('has'); $('dropText').innerHTML = dropDefault;
+    ['contact', 'comment'].forEach(i => $(i).value = ''); $('qty').value = 1;
     await refreshMe();
     show('orders');
   } catch (e) {
     fail(e.message);
+    if (/наличии/.test(e.message)) loadCatalog();
   } finally {
-    btn.disabled = false; btn.textContent = 'Отправить заявку';
+    btn.textContent = 'Отправить заявку';
+    renderCatalog();
   }
 });
 </script>
